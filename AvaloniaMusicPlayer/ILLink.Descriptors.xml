@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<linker>
+  <!-- 保留TagLib的所有类型和成员，防止反射构造函数被裁剪 -->
+  <assembly fullname="TagLibSharp" preserve="all" />
+  
+  <!-- 保留NAudio的关键类型 -->
+  <assembly fullname="NAudio.Core" preserve="all" />
+  <assembly fullname="NAudio.Wasapi" preserve="all" />
+  <assembly fullname="NAudio" preserve="all" />
+</linker>

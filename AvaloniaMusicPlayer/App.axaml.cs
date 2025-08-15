@@ -1,8 +1,9 @@
+using System;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Data.Core;
 using Avalonia.Data.Core.Plugins;
-using System.Linq;
 using Avalonia.Markup.Xaml;
 using AvaloniaMusicPlayer.ViewModels;
 using AvaloniaMusicPlayer.Views;
@@ -29,10 +30,31 @@ public partial class App : Application
             // 创建服务实例
             var audioPlayerService = new AudioPlayerService();
             var lyricService = new LyricService();
+            var cacheService = new PlaylistCacheService();
             
+            var viewModel = new MainWindowViewModel(audioPlayerService, lyricService, cacheService);
             desktop.MainWindow = new MainWindow
             {
-                DataContext = new MainWindowViewModel(audioPlayerService, lyricService),
+                DataContext = viewModel,
+            };
+            
+            // 监听应用程序关闭事件
+            desktop.ShutdownRequested += (sender, e) =>
+            {
+                Console.WriteLine("应用程序正在关闭，保存缓存...");
+                try
+                {
+                    if (audioPlayerService.Playlist.Count > 0)
+                    {
+                        var playlist = audioPlayerService.Playlist.ToList();
+                        cacheService.SavePlaylistAsync(playlist).Wait();
+                        Console.WriteLine("应用程序关闭时已保存播放列表缓存");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"关闭时保存缓存失败: {ex.Message}");
+                }
             };
         }
 
