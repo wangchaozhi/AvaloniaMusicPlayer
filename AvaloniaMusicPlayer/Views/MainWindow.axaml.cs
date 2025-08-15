@@ -2,8 +2,8 @@ using System;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using AvaloniaMusicPlayer.ViewModels;
 using AvaloniaMusicPlayer.Models;
+using AvaloniaMusicPlayer.ViewModels;
 
 namespace AvaloniaMusicPlayer.Views;
 
@@ -24,21 +24,23 @@ public partial class MainWindow : Window
         base.OnClosed(e);
     }
 
-    private void Slider_PointerPressed(object? sender, PointerPressedEventArgs e)
+    // 删除拖拽相关事件处理，不再需要
+
+    // 删除拖拽相关事件处理，不再需要
+
+    // 删除拖拽相关事件处理，不再需要
+
+    private void Slider_ValueChanged(
+        object? sender,
+        Avalonia.Controls.Primitives.RangeBaseValueChangedEventArgs e
+    )
     {
+        Console.WriteLine($"Slider_ValueChanged: {e.NewValue}");
+
         if (DataContext is MainWindowViewModel viewModel)
         {
-            viewModel.SetSliderDragging(true);
+            // 手动更新ViewModel中的SliderValue
+            viewModel.SliderValue = e.NewValue;
         }
     }
-
-    private void Slider_PointerReleased(object? sender, PointerReleasedEventArgs e)
-    {
-        if (DataContext is MainWindowViewModel viewModel)
-        {
-            viewModel.SetSliderDragging(false);
-        }
-    }
-
-
 }

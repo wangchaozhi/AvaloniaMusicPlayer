@@ -11,14 +11,14 @@ namespace AvaloniaMusicPlayer.Services
         event EventHandler<TimeSpan>? DurationChanged;
         event EventHandler<bool>? IsPlayingChanged;
         event EventHandler<Song?>? CurrentSongChanged;
-        
+
         bool IsPlaying { get; }
         TimeSpan CurrentPosition { get; }
         TimeSpan Duration { get; }
         Song? CurrentSong { get; }
         List<Song> Playlist { get; }
         int CurrentIndex { get; }
-        
+
         Task LoadSongAsync(Song song);
         Task PlaySongAsync(Song song);
         Task PlayAsync();
@@ -28,6 +28,8 @@ namespace AvaloniaMusicPlayer.Services
         Task PreviousAsync();
         Task SetPositionAsync(TimeSpan position);
         Task SetVolumeAsync(double volume);
+
+        // 删除SetUserDragging方法，不再需要
         void AddToPlaylist(Song song);
         void RemoveFromPlaylist(int index);
         void ClearPlaylist();

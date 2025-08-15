@@ -6,13 +6,13 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Platform.Storage;
 using AvaloniaMusicPlayer.Models;
 using AvaloniaMusicPlayer.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Avalonia.Controls;
-using Avalonia.Platform.Storage;
-using Avalonia.Controls.ApplicationLifetimes;
 
 namespace AvaloniaMusicPlayer.ViewModels
 {
@@ -23,6 +23,11 @@ namespace AvaloniaMusicPlayer.ViewModels
         private readonly IPlaylistCacheService _cacheService;
         private bool _isUpdatingSelection = false;
         private System.Timers.Timer? _uiUpdateTimer;
+        private bool _isUpdatingPosition = false; // 防止位置更新循环
+        private bool _isUserInteraction = false; // 标记用户是否正在交互
+
+        // 简化滑块控制相关字段
+        private bool _isSliderBeingUpdatedByCode = false;
 
         [ObservableProperty]
         private Song? _currentSong;
@@ -42,11 +47,7 @@ namespace AvaloniaMusicPlayer.ViewModels
         [ObservableProperty]
         private double _sliderValue;
 
-        [ObservableProperty]
-        private bool _isSliderDragging;
-
-        [ObservableProperty]
-        private bool _isSliderPressed;
+        // 删除拖拽相关属性，不再需要
 
         [ObservableProperty]
         private LyricLine? _currentLyric;
@@ -59,14 +60,16 @@ namespace AvaloniaMusicPlayer.ViewModels
 
         public ObservableCollection<Song> Playlist { get; } = new();
         public ObservableCollection<Song> FilteredPlaylist { get; } = new();
-        
+
         // 搜索结果显示
-        public string SearchResultText => string.IsNullOrWhiteSpace(SearchText) 
-            ? $"共 {Playlist.Count} 首歌曲" 
-            : $"找到 {FilteredPlaylist.Count} 首歌曲 (共 {Playlist.Count} 首)";
+        public string SearchResultText =>
+            string.IsNullOrWhiteSpace(SearchText)
+                ? $"共 {Playlist.Count} 首歌曲"
+                : $"找到 {FilteredPlaylist.Count} 首歌曲 (共 {Playlist.Count} 首)";
 
         // 播放控制相关属性
-        public string PlayPauseIcon => IsPlaying ? "M6 19h4V5H6v14zm8-14v14h4V5h-4z" : "M8 5v14l11-7z";
+        public string PlayPauseIcon =>
+            IsPlaying ? "M6 19h4V5H6v14zm8-14v14h4V5h-4z" : "M8 5v14l11-7z";
         public string PlayPauseTooltip => IsPlaying ? "暂停" : "播放";
         public bool HasPlaylist => Playlist.Count > 0;
         public bool HasCurrentSong => CurrentSong != null;
@@ -83,13 +86,16 @@ namespace AvaloniaMusicPlayer.ViewModels
         public ICommand ClearPlaylistCommand { get; }
         public ICommand ClearSearchCommand { get; }
 
-
-        public MainWindowViewModel(IAudioPlayerService audioPlayerService, ILyricService lyricService, IPlaylistCacheService cacheService)
+        public MainWindowViewModel(
+            IAudioPlayerService audioPlayerService,
+            ILyricService lyricService,
+            IPlaylistCacheService cacheService
+        )
         {
             _audioPlayerService = audioPlayerService;
             _lyricService = lyricService;
             _cacheService = cacheService;
-            
+
             // 初始化命令
             PlayCommand = new AsyncRelayCommand(PlayAsync, CanPlay);
             PauseCommand = new AsyncRelayCommand(PauseAsync, CanPause);
@@ -103,26 +109,25 @@ namespace AvaloniaMusicPlayer.ViewModels
             ClearPlaylistCommand = new RelayCommand(ClearPlaylist);
             ClearSearchCommand = new RelayCommand(ClearSearch);
 
-
             // 订阅音频播放器事件
             _audioPlayerService.PositionChanged += OnPositionChanged;
             _audioPlayerService.DurationChanged += OnDurationChanged;
             _audioPlayerService.IsPlayingChanged += OnIsPlayingChanged;
             _audioPlayerService.CurrentSongChanged += OnCurrentSongChanged;
-            
+
             // 订阅歌词服务事件
             _lyricService.CurrentLyricChanged += OnCurrentLyricChanged;
 
             // 同步播放列表
             SyncPlaylist();
-            
+
             // 启动UI状态更新定时器
             StartUIUpdateTimer();
-            
+
             // 加载缓存的播放列表
             _ = LoadCachedPlaylistAsync();
         }
-        
+
         private void StartUIUpdateTimer()
         {
             _uiUpdateTimer = new System.Timers.Timer(200); // 每200ms更新一次，降低频率
@@ -136,7 +141,7 @@ namespace AvaloniaMusicPlayer.ViewModels
                     OnPropertyChanged(nameof(IsPlaying));
                     OnPropertyChanged(nameof(PlayPauseIcon));
                     OnPropertyChanged(nameof(PlayPauseTooltip));
-                    
+
                     // 同时更新命令的可执行状态
                     (PlayCommand as AsyncRelayCommand)?.NotifyCanExecuteChanged();
                     (PauseCommand as AsyncRelayCommand)?.NotifyCanExecuteChanged();
@@ -146,13 +151,13 @@ namespace AvaloniaMusicPlayer.ViewModels
             _uiUpdateTimer.Start();
             Console.WriteLine("UI状态更新定时器已启动，每200ms同步一次播放状态");
         }
-        
+
         // 添加Dispose方法来清理资源
         public void Dispose()
         {
             _uiUpdateTimer?.Stop();
             _uiUpdateTimer?.Dispose();
-            
+
             // 在应用程序关闭时保存播放列表缓存
             if (_audioPlayerService.Playlist.Count > 0)
             {
@@ -178,7 +183,7 @@ namespace AvaloniaMusicPlayer.ViewModels
         private void FilterPlaylist()
         {
             FilteredPlaylist.Clear();
-            
+
             if (string.IsNullOrWhiteSpace(SearchText))
             {
                 // 如果搜索文本为空，显示所有歌曲
@@ -193,17 +198,19 @@ namespace AvaloniaMusicPlayer.ViewModels
                 var searchLower = SearchText.ToLower();
                 foreach (var song in Playlist)
                 {
-                    if (song.Title.ToLower().Contains(searchLower) ||
-                        song.Artist.ToLower().Contains(searchLower) ||
-                        song.Album.ToLower().Contains(searchLower))
+                    if (
+                        song.Title.ToLower().Contains(searchLower)
+                        || song.Artist.ToLower().Contains(searchLower)
+                        || song.Album.ToLower().Contains(searchLower)
+                    )
                     {
                         FilteredPlaylist.Add(song);
                     }
                 }
             }
-            
+
             Console.WriteLine($"搜索 '{SearchText}': 找到 {FilteredPlaylist.Count} 首歌曲");
-            
+
             // 更新搜索结果显示
             OnPropertyChanged(nameof(SearchResultText));
         }
@@ -246,8 +253,10 @@ namespace AvaloniaMusicPlayer.ViewModels
 
         private async Task PlayPauseAsync()
         {
-            Console.WriteLine($"PlayPauseAsync 被调用: IsPlaying={IsPlaying}, Playlist.Count={Playlist.Count}, CurrentSong={CurrentSong?.Title ?? "null"}");
-            
+            Console.WriteLine(
+                $"PlayPauseAsync 被调用: IsPlaying={IsPlaying}, Playlist.Count={Playlist.Count}, CurrentSong={CurrentSong?.Title ?? "null"}"
+            );
+
             if (IsPlaying)
             {
                 await PauseAsync();
@@ -275,13 +284,21 @@ namespace AvaloniaMusicPlayer.ViewModels
                         {
                             new FilePickerFileType("音频文件")
                             {
-                                Patterns = new[] { "*.mp3", "*.wav", "*.flac", "*.m4a", "*.aac", "*.ogg" }
-                            }
-                        }
+                                Patterns = new[]
+                                {
+                                    "*.mp3",
+                                    "*.wav",
+                                    "*.flac",
+                                    "*.m4a",
+                                    "*.aac",
+                                    "*.ogg",
+                                },
+                            },
+                        },
                     };
 
                     var files = await topLevel.StorageProvider.OpenFilePickerAsync(options);
-                    
+
                     var addedSongs = new List<Song>();
                     foreach (var file in files)
                     {
@@ -291,7 +308,11 @@ namespace AvaloniaMusicPlayer.ViewModels
                             if (song != null)
                             {
                                 // 检查是否已存在相同文件路径的歌曲
-                                if (!_audioPlayerService.Playlist.Any(s => s.FilePath == song.FilePath))
+                                if (
+                                    !_audioPlayerService.Playlist.Any(s =>
+                                        s.FilePath == song.FilePath
+                                    )
+                                )
                                 {
                                     _audioPlayerService.AddToPlaylist(song);
                                     addedSongs.Add(song);
@@ -305,7 +326,7 @@ namespace AvaloniaMusicPlayer.ViewModels
                         }
                     }
                     SyncPlaylist();
-                    
+
                     // 如果添加了歌曲且当前没有播放歌曲，自动选中第一首
                     if (addedSongs.Count > 0 && CurrentSong == null)
                     {
@@ -331,19 +352,17 @@ namespace AvaloniaMusicPlayer.ViewModels
                 var topLevel = TopLevel.GetTopLevel(GetMainWindow());
                 if (topLevel?.StorageProvider != null)
                 {
-                    var options = new FolderPickerOpenOptions
-                    {
-                        Title = "选择音乐文件夹"
-                    };
+                    var options = new FolderPickerOpenOptions { Title = "选择音乐文件夹" };
 
                     var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(options);
                     var addedSongs = new List<Song>();
-                    
+
                     foreach (var folder in folders)
                     {
                         if (folder.Path.LocalPath != null)
                         {
-                            var files = Directory.GetFiles(folder.Path.LocalPath, "*.*", SearchOption.AllDirectories)
+                            var files = Directory
+                                .GetFiles(folder.Path.LocalPath, "*.*", SearchOption.AllDirectories)
                                 .Where(file => IsAudioFile(file))
                                 .ToArray();
 
@@ -352,46 +371,61 @@ namespace AvaloniaMusicPlayer.ViewModels
                             // 使用Task.Run将文件处理移到后台线程，避免阻塞UI
                             await Task.Run(async () =>
                             {
-                                var semaphore = new SemaphoreSlim(Environment.ProcessorCount, Environment.ProcessorCount); // 限制并发数
-                                var tasks = files.Select(async file =>
-                                {
-                                    await semaphore.WaitAsync();
-                                    try
+                                var semaphore = new SemaphoreSlim(
+                                    Environment.ProcessorCount,
+                                    Environment.ProcessorCount
+                                ); // 限制并发数
+                                var tasks = files
+                                    .Select(async file =>
                                     {
-                                        var song = await LoadSongFromFileAsync(file);
-                                        if (song != null)
+                                        await semaphore.WaitAsync();
+                                        try
                                         {
-                                            // 在UI线程中更新播放列表
-                                            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                                            var song = await LoadSongFromFileAsync(file);
+                                            if (song != null)
                                             {
-                                                // 检查是否已存在相同文件路径的歌曲
-                                                if (!_audioPlayerService.Playlist.Any(s => s.FilePath == song.FilePath))
-                                                {
-                                                    _audioPlayerService.AddToPlaylist(song);
-                                                    addedSongs.Add(song);
-                                                    Console.WriteLine($"添加歌曲: {song.Title}");
-                                                }
-                                                else
-                                                {
-                                                    Console.WriteLine($"跳过重复歌曲: {song.Title}");
-                                                }
-                                            });
+                                                // 在UI线程中更新播放列表
+                                                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(
+                                                    () =>
+                                                    {
+                                                        // 检查是否已存在相同文件路径的歌曲
+                                                        if (
+                                                            !_audioPlayerService.Playlist.Any(s =>
+                                                                s.FilePath == song.FilePath
+                                                            )
+                                                        )
+                                                        {
+                                                            _audioPlayerService.AddToPlaylist(song);
+                                                            addedSongs.Add(song);
+                                                            Console.WriteLine(
+                                                                $"添加歌曲: {song.Title}"
+                                                            );
+                                                        }
+                                                        else
+                                                        {
+                                                            Console.WriteLine(
+                                                                $"跳过重复歌曲: {song.Title}"
+                                                            );
+                                                        }
+                                                    }
+                                                );
+                                            }
                                         }
-                                    }
-                                    finally
-                                    {
-                                        semaphore.Release();
-                                    }
-                                }).ToArray();
+                                        finally
+                                        {
+                                            semaphore.Release();
+                                        }
+                                    })
+                                    .ToArray();
 
                                 await Task.WhenAll(tasks);
                             });
                         }
                     }
-                    
+
                     // 在UI线程中同步播放列表
                     SyncPlaylist();
-                    
+
                     // 保存到缓存（立即保存，不等到关闭时）
                     if (addedSongs.Count > 0)
                     {
@@ -406,7 +440,7 @@ namespace AvaloniaMusicPlayer.ViewModels
                             Console.WriteLine($"保存播放列表缓存失败: {ex.Message}");
                         }
                     }
-                    
+
                     // 如果添加了歌曲且当前没有播放歌曲，自动选中第一首
                     if (addedSongs.Count > 0 && CurrentSong == null)
                     {
@@ -442,11 +476,11 @@ namespace AvaloniaMusicPlayer.ViewModels
         {
             _audioPlayerService.ClearPlaylist();
             SyncPlaylist();
-            
+
             // 确保当前歌曲也被清除
             CurrentSong = null;
             CurrentLyric = null;
-            
+
             // 清除缓存
             _ = _cacheService.ClearCacheAsync();
         }
@@ -468,7 +502,7 @@ namespace AvaloniaMusicPlayer.ViewModels
 
                 Console.WriteLine("正在加载缓存的播放列表...");
                 var cachedSongs = await _cacheService.LoadPlaylistAsync();
-                
+
                 if (cachedSongs.Count > 0)
                 {
                     // 在UI线程中添加歌曲到播放列表
@@ -489,21 +523,14 @@ namespace AvaloniaMusicPlayer.ViewModels
             }
         }
 
-
-
-
-
         private void OnPositionChanged(object? sender, TimeSpan position)
         {
             // 确保在UI线程中更新
             Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
             {
-                if (!IsSliderDragging && !IsSliderPressed)
-                {
-                    CurrentPosition = position;
-                    SliderValue = position.TotalSeconds;
-                }
-                
+                CurrentPosition = position;
+                UpdateSliderValue(position.TotalSeconds);
+
                 // 更新歌词
                 _lyricService.UpdateCurrentLyric(position);
             });
@@ -524,19 +551,19 @@ namespace AvaloniaMusicPlayer.ViewModels
             Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
             {
                 Console.WriteLine($"OnIsPlayingChanged: 播放状态变为 {isPlaying}");
-                
+
                 // 立即更新一次UI状态，不等定时器
                 OnPropertyChanged(nameof(IsPlaying));
                 OnPropertyChanged(nameof(PlayPauseIcon));
                 OnPropertyChanged(nameof(PlayPauseTooltip));
-                
+
                 // 刷新命令的可执行状态
                 (PlayCommand as AsyncRelayCommand)?.NotifyCanExecuteChanged();
                 (PauseCommand as AsyncRelayCommand)?.NotifyCanExecuteChanged();
                 (PlayPauseCommand as AsyncRelayCommand)?.NotifyCanExecuteChanged();
                 (NextCommand as AsyncRelayCommand)?.NotifyCanExecuteChanged();
                 (PreviousCommand as AsyncRelayCommand)?.NotifyCanExecuteChanged();
-                
+
                 Console.WriteLine($"UI状态已立即更新: IsPlaying={IsPlaying}");
             });
         }
@@ -546,9 +573,11 @@ namespace AvaloniaMusicPlayer.ViewModels
             // 确保在UI线程中更新
             Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
             {
-                Console.WriteLine($"OnCurrentSongChanged: {CurrentSong?.Title ?? "null"} -> {song?.Title ?? "null"}");
+                Console.WriteLine(
+                    $"OnCurrentSongChanged: {CurrentSong?.Title ?? "null"} -> {song?.Title ?? "null"}"
+                );
                 CurrentSong = song;
-                
+
                 // 同步选中的歌曲，但避免触发切换逻辑
                 if (song != null && SelectedSong != song)
                 {
@@ -558,23 +587,23 @@ namespace AvaloniaMusicPlayer.ViewModels
                     _isUpdatingSelection = false;
                     Console.WriteLine($"同步选中歌曲: {song.Title}");
                 }
-                
+
                 // 重置进度条
                 if (song != null)
                 {
-                    SliderValue = 0;
+                    UpdateSliderValue(0);
                     CurrentPosition = TimeSpan.Zero;
                     _ = LoadLyricsForSongAsync(song);
                 }
                 else
                 {
-                    SliderValue = 0;
+                    UpdateSliderValue(0);
                     CurrentPosition = TimeSpan.Zero;
                     Duration = TimeSpan.Zero;
                     _lyricService.ClearLyrics();
                     CurrentLyric = null;
                 }
-                
+
                 // 通知UI更新相关属性
                 OnPropertyChanged(nameof(HasCurrentSong));
                 (PlayPauseCommand as AsyncRelayCommand)?.NotifyCanExecuteChanged();
@@ -610,10 +639,10 @@ namespace AvaloniaMusicPlayer.ViewModels
             {
                 Playlist.Add(song);
             }
-            
+
             // 更新过滤后的播放列表
             FilterPlaylist();
-            
+
             // 通知UI更新相关属性
             OnPropertyChanged(nameof(HasPlaylist));
             OnPropertyChanged(nameof(SearchResultText));
@@ -632,17 +661,20 @@ namespace AvaloniaMusicPlayer.ViewModels
                     try
                     {
                         var song = new Song { FilePath = filePath };
-                        
+
                         // 使用TagLib读取音频文件信息
                         using var file = TagLib.File.Create(filePath);
-                        
+
                         // 优先使用文件名作为标题，然后尝试修复元数据
                         var fileName = Path.GetFileNameWithoutExtension(filePath);
                         song.Title = EncodingHelper.FixMusicTagEncoding(fileName) ?? "未知标题";
-                        
+
                         // 修复元数据中的艺术家和专辑信息
-                        song.Artist = EncodingHelper.FixMusicTagEncoding(file.Tag.FirstPerformer) ?? "未知艺术家";
-                        song.Album = EncodingHelper.FixMusicTagEncoding(file.Tag.Album) ?? "未知专辑";
+                        song.Artist =
+                            EncodingHelper.FixMusicTagEncoding(file.Tag.FirstPerformer)
+                            ?? "未知艺术家";
+                        song.Album =
+                            EncodingHelper.FixMusicTagEncoding(file.Tag.Album) ?? "未知专辑";
                         song.Duration = file.Properties.Duration;
 
                         // 记录调试信息（只在Debug模式下输出详细信息）
@@ -653,12 +685,14 @@ namespace AvaloniaMusicPlayer.ViewModels
                         Console.WriteLine($"显示标题: {song.Title}");
                         Console.WriteLine($"艺术家: {song.Artist}");
                         Console.WriteLine($"专辑: {song.Album}");
-                        
+
                         // 输出字节信息用于调试
                         if (!string.IsNullOrEmpty(file.Tag.Title))
                         {
                             var titleBytes = System.Text.Encoding.Default.GetBytes(file.Tag.Title);
-                            Console.WriteLine($"元数据标题字节: {BitConverter.ToString(titleBytes)}");
+                            Console.WriteLine(
+                                $"元数据标题字节: {BitConverter.ToString(titleBytes)}"
+                            );
                         }
 #endif
 
@@ -678,22 +712,21 @@ namespace AvaloniaMusicPlayer.ViewModels
             }
         }
 
-
-
         private bool IsAudioFile(string filePath)
         {
             var extension = Path.GetExtension(filePath).ToLowerInvariant();
             return extension switch
             {
                 ".mp3" or ".wav" or ".flac" or ".m4a" or ".aac" or ".ogg" => true,
-                _ => false
+                _ => false,
             };
         }
 
         private Window? GetMainWindow()
         {
             // 获取主窗口的简单实现
-            return App.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
+            return
+                App.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
                 ? desktop.MainWindow
                 : null;
         }
@@ -703,36 +736,35 @@ namespace AvaloniaMusicPlayer.ViewModels
             _ = _audioPlayerService.SetVolumeAsync(value);
         }
 
-
-
+        // 简化的滑块值变化处理
         partial void OnSliderValueChanged(double value)
         {
-            // 当滑块值改变时，更新当前位置显示
-            CurrentPosition = TimeSpan.FromSeconds(value);
-            
-            // 如果正在拖动，立即更新播放位置
-            if (IsSliderDragging)
+            // 如果是代码更新滑块，不处理
+            if (_isSliderBeingUpdatedByCode)
             {
-                var position = TimeSpan.FromSeconds(value);
-                _ = _audioPlayerService.SetPositionAsync(position);
+                return;
             }
+
+            // 当滑块值改变时，直接更新播放位置
+            var position = TimeSpan.FromSeconds(value);
+            Console.WriteLine($"滑块值变化: 设置播放位置到 {position:mm\\:ss}");
+            _ = _audioPlayerService.SetPositionAsync(position);
+
+            // 更新歌词
+            _lyricService.UpdateCurrentLyric(position);
         }
 
-        // 手动设置滑块拖动状态的方法
-        public void SetSliderDragging(bool isDragging)
+        // 手动更新滑块值的方法（用于从播放位置更新滑块）
+        public void UpdateSliderValue(double value)
         {
-            Console.WriteLine($"设置拖拽状态: {isDragging}, 滑块值: {SliderValue}");
-            IsSliderDragging = isDragging;
-            IsSliderPressed = isDragging;
-            
-            if (!isDragging)
-            {
-                // 拖拽结束时，确保位置正确设置
-                var position = TimeSpan.FromSeconds(SliderValue);
-                Console.WriteLine($"拖拽结束，设置位置: {position:mm\\:ss}");
-                _ = _audioPlayerService.SetPositionAsync(position);
-            }
+            _isSliderBeingUpdatedByCode = true;
+            SliderValue = value;
+            _isSliderBeingUpdatedByCode = false;
         }
+
+        // 删除拖拽状态设置方法，不再需要
+
+        // 删除SetPositionFromSlider方法，不再需要
 
         // 处理选中歌曲变化
         partial void OnSelectedSongChanged(Song? value)
@@ -743,11 +775,13 @@ namespace AvaloniaMusicPlayer.ViewModels
                 Console.WriteLine("内部同步选择，跳过处理");
                 return;
             }
-            
+
             if (value != null)
             {
-                Console.WriteLine($"用户选中歌曲: {value.Title}, 当前歌曲: {CurrentSong?.Title ?? "无"}");
-                
+                Console.WriteLine(
+                    $"用户选中歌曲: {value.Title}, 当前歌曲: {CurrentSong?.Title ?? "无"}"
+                );
+
                 // 如果点击的是当前正在播放的歌曲，从头播放
                 if (value == CurrentSong)
                 {
@@ -782,17 +816,17 @@ namespace AvaloniaMusicPlayer.ViewModels
                                 await _audioPlayerService.PauseAsync();
                                 Console.WriteLine("已暂停当前播放");
                             }
-                            
+
                             // 切换歌曲
                             await _audioPlayerService.PlaySongAsync(value);
                             Console.WriteLine("歌曲切换完成");
-                            
+
                             // 稍微延迟以确保状态同步
                             await Task.Delay(50);
-                            
+
                             // 开始播放新歌曲
                             await _audioPlayerService.PlayAsync();
-                            
+
                             Console.WriteLine($"成功切换并播放: {value.Title}");
                         }
                         catch (Exception ex)

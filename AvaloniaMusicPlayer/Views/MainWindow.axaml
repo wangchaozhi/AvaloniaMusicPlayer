@@ -46,24 +46,21 @@
                         </Border>
                         
                         <!-- 进度条 -->
-                        <StackPanel Orientation="Vertical" Spacing="8" Margin="0,15,0,15">
-                            <Grid ColumnDefinitions="Auto, *, Auto">
-                                <TextBlock Grid.Column="0" Text="{Binding CurrentPosition, StringFormat='{}{0:mm\\:ss}'}" FontSize="12"/>
-                                <TextBlock Grid.Column="2" Text="{Binding Duration, StringFormat='{}{0:mm\\:ss}'}" FontSize="12"/>
+                        <StackPanel Orientation="Vertical" Spacing="5" Margin="0,15,0,15">
+                            <Slider x:Name="ProgressSlider"
+                                    Value="{Binding SliderValue}" 
+                                    Maximum="{Binding Duration.TotalSeconds}" 
+                                    IsEnabled="{Binding HasCurrentSong}"
+                                    Height="35"
+                                    Margin="0,0"
+                                    Minimum="0"
+                                    TickFrequency="1"
+                                    IsSnapToTickEnabled="False"
+                                    ValueChanged="Slider_ValueChanged"/>
+                            <Grid ColumnDefinitions="Auto, *, Auto" Margin="0,2">
+                                <TextBlock Grid.Column="0" Text="{Binding CurrentPosition, StringFormat='{}{0:mm\\:ss}'}" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                                <TextBlock Grid.Column="2" Text="{Binding Duration, StringFormat='{}{0:mm\\:ss}'}" FontSize="11" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
                             </Grid>
-                            <Border Padding="0,5" ZIndex="1000">
-                                <Slider x:Name="ProgressSlider"
-                                        Value="{Binding SliderValue, Mode=TwoWay}" 
-                                        Maximum="{Binding Duration.TotalSeconds}" 
-                                        IsEnabled="{Binding HasCurrentSong}"
-                                        Height="30"
-                                        Margin="0,5"
-                                        Minimum="0"
-                                        TickFrequency="1"
-                                        IsSnapToTickEnabled="False"
-                                        PointerPressed="Slider_PointerPressed"
-                                        PointerReleased="Slider_PointerReleased"/>
-                            </Border>
                         </StackPanel>
                         
                         <!-- 播放控制按钮 -->

@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using AvaloniaMusicPlayer.Models;
-using NAudio.Wave;
 using NAudio.MediaFoundation;
+using NAudio.Wave;
 using TagLib;
 
 namespace AvaloniaMusicPlayer.Services
@@ -19,6 +19,8 @@ namespace AvaloniaMusicPlayer.Services
         private bool _disposed = false;
         private bool _isManualStop = false;
 
+        // 删除用户拖拽标志，不再需要
+
         public event EventHandler<TimeSpan>? PositionChanged;
         public event EventHandler<TimeSpan>? DurationChanged;
         public event EventHandler<bool>? IsPlayingChanged;
@@ -27,9 +29,12 @@ namespace AvaloniaMusicPlayer.Services
         public bool IsPlaying => _waveOut?.PlaybackState == PlaybackState.Playing;
         public TimeSpan CurrentPosition => _audioFile?.CurrentTime ?? TimeSpan.Zero;
         public TimeSpan Duration => _audioFile?.TotalTime ?? TimeSpan.Zero;
-        public Song? CurrentSong => _currentIndex >= 0 && _currentIndex < _playlist.Count ? _playlist[_currentIndex] : null;
+        public Song? CurrentSong =>
+            _currentIndex >= 0 && _currentIndex < _playlist.Count ? _playlist[_currentIndex] : null;
         public List<Song> Playlist => _playlist;
         public int CurrentIndex => _currentIndex;
+
+        // 删除设置拖拽状态的方法，不再需要
 
         public AudioPlayerService()
         {
@@ -43,7 +48,7 @@ namespace AvaloniaMusicPlayer.Services
             {
                 Console.WriteLine($"MediaFoundation初始化失败: {ex.Message}");
             }
-            
+
             _waveOut = new WaveOutEvent();
             _waveOut.PlaybackStopped += OnPlaybackStopped;
         }
@@ -53,10 +58,10 @@ namespace AvaloniaMusicPlayer.Services
             try
             {
                 Console.WriteLine($"LoadSongAsync: 开始加载歌曲 {song.Title}");
-                
+
                 // 设置手动停止标志，防止自动播放下一首
                 _isManualStop = true;
-                
+
                 // 先停止当前播放
                 if (_waveOut != null)
                 {
@@ -79,7 +84,7 @@ namespace AvaloniaMusicPlayer.Services
                         _waveOut = null;
                     }
                 }
-                
+
                 // 释放旧的音频文件
                 if (_audioFile != null)
                 {
@@ -91,19 +96,21 @@ namespace AvaloniaMusicPlayer.Services
                 {
                     _audioFile = new AudioFileReader(song.FilePath);
                     _audioFile.Volume = (float)_volume;
-                    
+
                     // 确保音频文件从头开始
                     _audioFile.Position = 0;
-                    
-                    Console.WriteLine($"音频文件信息: 采样率={_audioFile.WaveFormat.SampleRate}Hz, 声道={_audioFile.WaveFormat.Channels}, 位数={_audioFile.WaveFormat.BitsPerSample}bit");
-                    
+
+                    Console.WriteLine(
+                        $"音频文件信息: 采样率={_audioFile.WaveFormat.SampleRate}Hz, 声道={_audioFile.WaveFormat.Channels}, 位数={_audioFile.WaveFormat.BitsPerSample}bit"
+                    );
+
                     // 安全地释放当前的WaveOut
                     SafeDisposeWaveOut();
-                    
+
                     // 尝试多种方式创建和初始化WaveOut
                     bool initSuccess = false;
                     Exception lastException = null;
-                    
+
                     // 方法1: 使用默认设备
                     try
                     {
@@ -125,7 +132,7 @@ namespace AvaloniaMusicPlayer.Services
                         lastException = ex1;
                         SafeDisposeWaveOut();
                     }
-                    
+
                     // 方法2: 如果默认设备失败，尝试指定设备ID
                     if (!initSuccess)
                     {
@@ -144,7 +151,7 @@ namespace AvaloniaMusicPlayer.Services
                             SafeDisposeWaveOut();
                         }
                     }
-                    
+
                     // 方法3: 如果还是失败，尝试创建重采样器
                     if (!initSuccess)
                     {
@@ -152,11 +159,14 @@ namespace AvaloniaMusicPlayer.Services
                         {
                             // 首先尝试初始化MediaFoundation
                             MediaFoundationApi.Startup();
-                            
+
                             // 创建一个标准格式的重采样器
-                            var resampler = new MediaFoundationResampler(_audioFile, new WaveFormat(44100, 16, 2));
+                            var resampler = new MediaFoundationResampler(
+                                _audioFile,
+                                new WaveFormat(44100, 16, 2)
+                            );
                             resampler.ResamplerQuality = 60;
-                            
+
                             _waveOut = CreateNewWaveOut();
                             if (_waveOut != null)
                             {
@@ -166,7 +176,9 @@ namespace AvaloniaMusicPlayer.Services
                             }
                             else
                             {
-                                throw new InvalidOperationException("无法创建WaveOutEvent用于重采样器");
+                                throw new InvalidOperationException(
+                                    "无法创建WaveOutEvent用于重采样器"
+                                );
                             }
                         }
                         catch (Exception ex3)
@@ -176,7 +188,7 @@ namespace AvaloniaMusicPlayer.Services
                             SafeDisposeWaveOut();
                         }
                     }
-                    
+
                     // 方法4: 如果重采样器也失败，尝试使用WaveChannel32
                     if (!initSuccess)
                     {
@@ -185,7 +197,7 @@ namespace AvaloniaMusicPlayer.Services
                             // 重新读取音频文件
                             _audioFile.Position = 0;
                             var waveChannel = new WaveChannel32(_audioFile);
-                            
+
                             _waveOut = CreateNewWaveOut();
                             if (_waveOut != null)
                             {
@@ -195,7 +207,9 @@ namespace AvaloniaMusicPlayer.Services
                             }
                             else
                             {
-                                throw new InvalidOperationException("无法创建WaveOutEvent用于WaveChannel32");
+                                throw new InvalidOperationException(
+                                    "无法创建WaveOutEvent用于WaveChannel32"
+                                );
                             }
                         }
                         catch (Exception ex4)
@@ -205,17 +219,17 @@ namespace AvaloniaMusicPlayer.Services
                             SafeDisposeWaveOut();
                         }
                     }
-                    
+
                     // 方法5: 最后的备用方案 - 使用DirectSound
                     if (!initSuccess)
                     {
                         try
                         {
                             _audioFile.Position = 0;
-                            _waveOut = new WaveOutEvent() 
-                            { 
+                            _waveOut = new WaveOutEvent()
+                            {
                                 DeviceNumber = -1, // 使用默认设备
-                                DesiredLatency = 200 // 增加延迟以提高兼容性
+                                DesiredLatency = 200, // 增加延迟以提高兼容性
                             };
                             _waveOut.PlaybackStopped += OnPlaybackStopped;
                             _waveOut.Init(_audioFile);
@@ -229,28 +243,30 @@ namespace AvaloniaMusicPlayer.Services
                             SafeDisposeWaveOut();
                         }
                     }
-                    
+
                     if (!initSuccess)
                     {
                         Console.WriteLine($"所有初始化方法都失败，将跳过此文件");
                         // 不抛出异常，而是创建一个空的WaveOut以避免后续空引用
                         _waveOut = CreateNewWaveOut();
                         Console.WriteLine($"最后一个异常: {lastException?.Message}");
-                        
+
                         // 清理音频文件
                         _audioFile?.Dispose();
                         _audioFile = null;
                         return Task.CompletedTask;
                     }
-                    
+
                     // 通知UI更新
                     DurationChanged?.Invoke(this, Duration);
                     CurrentSongChanged?.Invoke(this, song);
                     PositionChanged?.Invoke(this, TimeSpan.Zero);
                     IsPlayingChanged?.Invoke(this, false);
-                    
-                    Console.WriteLine($"LoadSongAsync: 成功加载 {song.Title}, 时长: {Duration}, 位置: {_audioFile.CurrentTime}");
-                    
+
+                    Console.WriteLine(
+                        $"LoadSongAsync: 成功加载 {song.Title}, 时长: {Duration}, 位置: {_audioFile.CurrentTime}"
+                    );
+
                     // 启动位置更新定时器
                     StartPositionTimer();
                 }
@@ -267,7 +283,7 @@ namespace AvaloniaMusicPlayer.Services
             {
                 Console.WriteLine($"加载歌曲失败: {ex.Message}");
                 Console.WriteLine($"   堆栈跟踪: {ex.StackTrace}");
-                
+
                 // 确保在异常情况下清理状态
                 try
                 {
@@ -299,8 +315,10 @@ namespace AvaloniaMusicPlayer.Services
                 {
                     _isManualStop = false; // 开始播放时重置手动停止标志
                     Console.WriteLine($"▶️ [开始播放] {CurrentSong?.Title ?? "未知歌曲"}");
-                    Console.WriteLine($"   音频状态: WaveOut={_waveOut.PlaybackState}, 文件长度={_audioFile.TotalTime}");
-                    
+                    Console.WriteLine(
+                        $"   音频状态: WaveOut={_waveOut.PlaybackState}, 文件长度={_audioFile.TotalTime}"
+                    );
+
                     try
                     {
                         _waveOut.Play();
@@ -309,15 +327,15 @@ namespace AvaloniaMusicPlayer.Services
                     catch (Exception playEx)
                     {
                         Console.WriteLine($"调用WaveOut.Play()时发生异常: {playEx.Message}");
-                        
+
                         // 尝试重新初始化WaveOut
                         try
                         {
                             Console.WriteLine("尝试重新初始化WaveOut...");
-                            
+
                             // 安全地释放当前的WaveOut
                             SafeDisposeWaveOut();
-                            
+
                             // 重新创建WaveOut
                             _waveOut = CreateNewWaveOut();
                             if (_waveOut != null && _audioFile != null)
@@ -342,14 +360,16 @@ namespace AvaloniaMusicPlayer.Services
                 }
                 else
                 {
-                    Console.WriteLine($"❌ [播放失败] WaveOut={_waveOut != null}, AudioFile={_audioFile != null}, CurrentSong={CurrentSong?.Title ?? "null"}");
-                    
+                    Console.WriteLine(
+                        $"❌ [播放失败] WaveOut={_waveOut != null}, AudioFile={_audioFile != null}, CurrentSong={CurrentSong?.Title ?? "null"}"
+                    );
+
                     // 尝试重新初始化
                     if (CurrentSong != null)
                     {
                         Console.WriteLine("尝试重新加载当前歌曲");
                         await LoadSongAsync(CurrentSong);
-                        
+
                         // 重新尝试播放
                         if (_waveOut != null && _audioFile != null)
                         {
@@ -372,7 +392,7 @@ namespace AvaloniaMusicPlayer.Services
                 Console.WriteLine($"❌ [播放异常] {ex.Message}");
                 Console.WriteLine($"   堆栈跟踪: {ex.StackTrace}");
             }
-            
+
             await Task.CompletedTask;
         }
 
@@ -380,7 +400,7 @@ namespace AvaloniaMusicPlayer.Services
         {
             _isManualStop = true;
             Console.WriteLine($"⏸️ [暂停播放] {CurrentSong?.Title ?? "未知歌曲"}");
-            
+
             try
             {
                 if (_waveOut != null && _waveOut.PlaybackState == PlaybackState.Playing)
@@ -392,7 +412,7 @@ namespace AvaloniaMusicPlayer.Services
             {
                 Console.WriteLine($"暂停播放时发生异常: {ex.Message}");
             }
-            
+
             IsPlayingChanged?.Invoke(this, false);
             await Task.CompletedTask;
         }
@@ -400,7 +420,7 @@ namespace AvaloniaMusicPlayer.Services
         public async Task StopAsync()
         {
             _isManualStop = true;
-            
+
             try
             {
                 if (_waveOut != null && _waveOut.PlaybackState != PlaybackState.Stopped)
@@ -412,7 +432,7 @@ namespace AvaloniaMusicPlayer.Services
             {
                 Console.WriteLine($"停止播放时发生异常: {ex.Message}");
             }
-            
+
             try
             {
                 if (_audioFile != null)
@@ -425,7 +445,7 @@ namespace AvaloniaMusicPlayer.Services
             {
                 Console.WriteLine($"重置音频位置时发生异常: {ex.Message}");
             }
-            
+
             IsPlayingChanged?.Invoke(this, false);
             await Task.CompletedTask;
         }
@@ -436,18 +456,22 @@ namespace AvaloniaMusicPlayer.Services
             {
                 var wasPlaying = IsPlaying;
                 var oldIndex = _currentIndex;
-                
-                Console.WriteLine($"🔽 [用户点击下一首] 当前索引: {oldIndex}, 播放状态: {(wasPlaying ? "播放中" : "暂停")}");
-                
+
+                Console.WriteLine(
+                    $"🔽 [用户点击下一首] 当前索引: {oldIndex}, 播放状态: {(wasPlaying ? "播放中" : "暂停")}"
+                );
+
                 // 切换到下一首
                 _currentIndex = (_currentIndex + 1) % _playlist.Count;
-                
+
                 Console.WriteLine($"   NextAsync: 从索引 {oldIndex} 切换到 {_currentIndex}");
-                Console.WriteLine($"   歌曲: {_playlist[oldIndex].Title} → {_playlist[_currentIndex].Title}");
-                
+                Console.WriteLine(
+                    $"   歌曲: {_playlist[oldIndex].Title} → {_playlist[_currentIndex].Title}"
+                );
+
                 // 直接加载新歌曲（这会自动停止当前播放）
                 await LoadSongAsync(_playlist[_currentIndex]);
-                
+
                 // 如果之前在播放，立即开始播放新歌曲
                 if (wasPlaying)
                 {
@@ -471,18 +495,22 @@ namespace AvaloniaMusicPlayer.Services
             {
                 var wasPlaying = IsPlaying;
                 var oldIndex = _currentIndex;
-                
-                Console.WriteLine($"🔼 [用户点击上一首] 当前索引: {oldIndex}, 播放状态: {(wasPlaying ? "播放中" : "暂停")}");
-                
+
+                Console.WriteLine(
+                    $"🔼 [用户点击上一首] 当前索引: {oldIndex}, 播放状态: {(wasPlaying ? "播放中" : "暂停")}"
+                );
+
                 // 切换到上一首
                 _currentIndex = _currentIndex <= 0 ? _playlist.Count - 1 : _currentIndex - 1;
-                
+
                 Console.WriteLine($"   PreviousAsync: 从索引 {oldIndex} 切换到 {_currentIndex}");
-                Console.WriteLine($"   歌曲: {_playlist[oldIndex].Title} → {_playlist[_currentIndex].Title}");
-                
+                Console.WriteLine(
+                    $"   歌曲: {_playlist[oldIndex].Title} → {_playlist[_currentIndex].Title}"
+                );
+
                 // 直接加载新歌曲（这会自动停止当前播放）
                 await LoadSongAsync(_playlist[_currentIndex]);
-                
+
                 // 如果之前在播放，立即开始播放新歌曲
                 if (wasPlaying)
                 {
@@ -502,13 +530,45 @@ namespace AvaloniaMusicPlayer.Services
 
         public async Task SetPositionAsync(TimeSpan position)
         {
-            if (_audioFile != null && position >= TimeSpan.Zero && position <= _audioFile.TotalTime)
+            try
             {
-                _audioFile.CurrentTime = position;
-                // 立即通知位置变化
-                PositionChanged?.Invoke(this, position);
-                Console.WriteLine($"位置设置为: {position:mm\\:ss}");
+                if (_audioFile != null && position >= TimeSpan.Zero)
+                {
+                    // 确保位置设置在有效范围内
+                    var clampedPosition = position;
+                    if (position > _audioFile.TotalTime)
+                    {
+                        clampedPosition = _audioFile.TotalTime;
+                    }
+                    else if (position < TimeSpan.Zero)
+                    {
+                        clampedPosition = TimeSpan.Zero;
+                    }
+
+                    Console.WriteLine(
+                        $"设置音频位置: {clampedPosition:mm\\:ss} / {_audioFile.TotalTime:mm\\:ss}"
+                    );
+
+                    // 设置音频文件位置
+                    _audioFile.CurrentTime = clampedPosition;
+
+                    // 立即通知位置变化
+                    PositionChanged?.Invoke(this, clampedPosition);
+
+                    Console.WriteLine($"音频位置已设置为: {_audioFile.CurrentTime:mm\\:ss}");
+                }
+                else
+                {
+                    Console.WriteLine(
+                        $"无效的位置设置请求: position={position}, audioFile={_audioFile != null}, duration={_audioFile?.TotalTime}"
+                    );
+                }
             }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"设置音频位置时发生异常: {ex.Message}");
+            }
+
             await Task.CompletedTask;
         }
 
@@ -547,10 +607,10 @@ namespace AvaloniaMusicPlayer.Services
                 Console.WriteLine($"PlaySongAsync: 切换到索引 {index}, 歌曲: {song.Title}");
                 _currentIndex = index;
                 await LoadSongAsync(song);
-                
+
                 // 确保当前歌曲被正确设置
                 CurrentSongChanged?.Invoke(this, song);
-                
+
                 // 确保播放状态被正确设置为停止状态
                 IsPlayingChanged?.Invoke(this, false);
                 Console.WriteLine($"PlaySongAsync: 歌曲切换完成，播放状态重置为false");
@@ -582,7 +642,7 @@ namespace AvaloniaMusicPlayer.Services
             _playlist.Clear();
             _currentIndex = -1;
             _ = StopAsync();
-            
+
             // 触发事件通知UI更新
             CurrentSongChanged?.Invoke(this, null);
         }
@@ -592,13 +652,17 @@ namespace AvaloniaMusicPlayer.Services
             var currentPos = _audioFile?.CurrentTime ?? TimeSpan.Zero;
             var duration = _audioFile?.TotalTime ?? TimeSpan.Zero;
             var playbackState = _waveOut?.PlaybackState.ToString() ?? "Unknown";
-            
+
             Console.WriteLine($"🛑 [播放停止事件] 歌曲: {CurrentSong?.Title ?? "未知"}");
-            Console.WriteLine($"   位置: {currentPos:mm\\:ss} / {duration:mm\\:ss}, 状态: {playbackState}");
-            Console.WriteLine($"   异常: {e.Exception?.Message ?? "无"}, 手动停止: {_isManualStop}");
-            
+            Console.WriteLine(
+                $"   位置: {currentPos:mm\\:ss} / {duration:mm\\:ss}, 状态: {playbackState}"
+            );
+            Console.WriteLine(
+                $"   异常: {e.Exception?.Message ?? "无"}, 手动停止: {_isManualStop}"
+            );
+
             IsPlayingChanged?.Invoke(this, false);
-            
+
             // 如果是手动停止，重置标志并返回
             if (_isManualStop)
             {
@@ -606,11 +670,11 @@ namespace AvaloniaMusicPlayer.Services
                 Console.WriteLine("   → 手动停止播放，不自动切换下一首");
                 return;
             }
-            
+
             // 检查是否真的播放完毕（位置接近结尾）
-            var isReallyFinished = duration > TimeSpan.Zero && 
-                                   Math.Abs((duration - currentPos).TotalSeconds) < 1.0;
-            
+            var isReallyFinished =
+                duration > TimeSpan.Zero && Math.Abs((duration - currentPos).TotalSeconds) < 1.0;
+
             // 如果播放完成且不是用户主动停止，自动播放下一首
             if (e.Exception == null && _playlist.Count > 0 && isReallyFinished)
             {
@@ -683,13 +747,23 @@ namespace AvaloniaMusicPlayer.Services
             // 启动一个持续的定时器来更新位置
             _ = Task.Run(async () =>
             {
+                TimeSpan lastPosition = TimeSpan.Zero;
+
                 while (!_disposed)
                 {
+                    // 只有在播放状态时才更新位置
                     if (_waveOut?.PlaybackState == PlaybackState.Playing && _audioFile != null)
                     {
-                        PositionChanged?.Invoke(this, CurrentPosition);
+                        var currentPosition = CurrentPosition;
+                        // 只有当位置真正发生变化时才触发事件
+                        if (currentPosition != lastPosition)
+                        {
+                            PositionChanged?.Invoke(this, currentPosition);
+                            lastPosition = currentPosition;
+                        }
                     }
-                    await Task.Delay(100);
+
+                    await Task.Delay(100); // 每100ms更新一次
                 }
             });
         }
@@ -702,7 +776,7 @@ namespace AvaloniaMusicPlayer.Services
                 SafeDisposeWaveOut();
                 _audioFile?.Dispose();
                 _audioFile = null;
-                
+
                 // 清理MediaFoundation
                 try
                 {
