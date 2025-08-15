@@ -1,0 +1,168 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:AvaloniaMusicPlayer.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="600"
+        x:Class="AvaloniaMusicPlayer.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="音乐播放器">
+
+    <Design.DataContext>
+        <vm:MainWindowViewModel/>
+    </Design.DataContext>
+
+    <Grid RowDefinitions="*, Auto">
+        <!-- 主内容区域 -->
+        <Grid Grid.Row="0" ColumnDefinitions="Auto, *">
+            <!-- 播放器控制区域 -->
+            <Border Grid.Column="0" Width="350" Margin="10" BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}" BorderThickness="1" CornerRadius="5">
+                <Grid RowDefinitions="Auto, *, Auto" Margin="15">
+                    <TextBlock Grid.Row="0" Text="音乐播放器" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,20"/>
+                    
+                    <!-- 当前播放信息 -->
+                    <StackPanel Grid.Row="1" Orientation="Vertical" Spacing="15">
+                        <TextBlock Text="正在播放" FontSize="16" FontWeight="Bold"/>
+                        
+                        <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" CornerRadius="5" Padding="15">
+                            <StackPanel Orientation="Vertical" Spacing="8">
+                                <TextBlock Text="{Binding CurrentSong.DisplayTitle}" FontWeight="SemiBold" TextWrapping="Wrap" FontSize="14"/>
+                                <TextBlock Text="{Binding CurrentSong.DisplayArtist}" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" FontSize="12"/>
+                                <TextBlock Text="{Binding CurrentSong.DisplayAlbum}" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" FontSize="12"/>
+                            </StackPanel>
+                        </Border>
+                        
+                        <!-- 歌词显示 -->
+                        <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}" CornerRadius="5" Padding="15" MinHeight="60">
+                            <StackPanel Orientation="Vertical" Spacing="5">
+                                <TextBlock Text="歌词" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                                <TextBlock Text="{Binding CurrentLyric.DisplayText}" 
+                                         FontSize="14" FontWeight="SemiBold" 
+                                         TextWrapping="Wrap" 
+                                         HorizontalAlignment="Center"
+                                         Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                            </StackPanel>
+                        </Border>
+                        
+                        <!-- 进度条 -->
+                        <StackPanel Orientation="Vertical" Spacing="8" Margin="0,15,0,15">
+                            <Grid ColumnDefinitions="Auto, *, Auto">
+                                <TextBlock Grid.Column="0" Text="{Binding CurrentPosition, StringFormat='{}{0:mm\\:ss}'}" FontSize="12"/>
+                                <TextBlock Grid.Column="2" Text="{Binding Duration, StringFormat='{}{0:mm\\:ss}'}" FontSize="12"/>
+                            </Grid>
+                            <Border Padding="0,5" ZIndex="1000">
+                                <Slider x:Name="ProgressSlider"
+                                        Value="{Binding SliderValue, Mode=TwoWay}" 
+                                        Maximum="{Binding Duration.TotalSeconds}" 
+                                        IsEnabled="{Binding HasCurrentSong}"
+                                        Height="30"
+                                        Margin="0,5"
+                                        Minimum="0"
+                                        TickFrequency="1"
+                                        IsSnapToTickEnabled="False"
+                                        PointerPressed="Slider_PointerPressed"
+                                        PointerReleased="Slider_PointerReleased"/>
+                            </Border>
+                        </StackPanel>
+                        
+                        <!-- 播放控制按钮 -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="15" Margin="0,10">
+                            <!-- 上一曲 -->
+                            <Button Command="{Binding PreviousCommand}" 
+                                    IsEnabled="{Binding HasPlaylist}" 
+                                    Width="45" Height="45"
+                                    ToolTip.Tip="上一曲">
+                                <PathIcon Data="M11,18 L11,6 L6,12 L11,18 Z M7,6 L7,18 L5,18 L5,6 L7,6 Z" Width="20" Height="20"/>
+                            </Button>
+                            
+                            <!-- 播放/暂停 -->
+                            <Button Command="{Binding PlayPauseCommand}" 
+                                    IsEnabled="{Binding HasPlaylist}"
+                                    Width="55" Height="55"
+                                    ToolTip.Tip="{Binding PlayPauseTooltip}">
+                                <PathIcon Data="{Binding PlayPauseIcon}" Width="24" Height="24"/>
+                            </Button>
+                            
+                            <!-- 下一曲 -->
+                            <Button Command="{Binding NextCommand}" 
+                                    IsEnabled="{Binding HasPlaylist}" 
+                                    Width="45" Height="45"
+                                    ToolTip.Tip="下一曲">
+                                <PathIcon Data="M13,6 L13,18 L18,12 L13,6 Z M17,6 L17,18 L19,18 L19,6 L17,6 Z" Width="20" Height="20"/>
+                            </Button>
+                        </StackPanel>
+                        
+                        <!-- 音量控制 -->
+                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <PathIcon Data="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" Width="20" Height="20"/>
+                            <Slider Value="{Binding Volume}" Minimum="0" Maximum="1" Width="150"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- 播放列表 -->
+            <Border Grid.Column="1" Margin="0,10,10,10" BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}" BorderThickness="1" CornerRadius="5">
+                <Grid RowDefinitions="Auto, *">
+                    <Grid Grid.Row="0" ColumnDefinitions="*, Auto" Margin="15">
+                        <TextBlock Grid.Column="0" Text="播放列表" FontSize="18" FontWeight="Bold" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                            <Button Content="打开文件" Command="{Binding OpenFileCommand}" Padding="12,6"/>
+                            <Button Content="打开文件夹" Command="{Binding OpenFolderCommand}" Padding="12,6"/>
+                            <Button Content="清空列表" Command="{Binding ClearPlaylistCommand}" Padding="12,6"/>
+                        </StackPanel>
+                    </Grid>
+                    
+                    <ListBox Grid.Row="1" 
+                             ItemsSource="{Binding Playlist}" 
+                             SelectedItem="{Binding SelectedSong, Mode=TwoWay}"
+                             Margin="15,0,15,15">
+                        <ListBox.ItemContainerTheme>
+                            <ControlTheme TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Margin" Value="0,1"/>
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="CornerRadius" Value="4"/>
+                                <Style Selector="^:selected">
+                                    <Setter Property="Background" Value="{DynamicResource SystemAccentColorLight2}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundChromeWhiteBrush}"/>
+                                </Style>
+                                <Style Selector="^:selected /template/ ContentPresenter">
+                                    <Setter Property="Background" Value="{DynamicResource SystemAccentColorLight2}"/>
+                                    <Setter Property="CornerRadius" Value="4"/>
+                                </Style>
+                                <Style Selector="^:pointerover">
+                                    <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundListLowBrush}"/>
+                                </Style>
+                            </ControlTheme>
+                        </ListBox.ItemContainerTheme>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ColumnDefinitions="*, Auto, Auto" Margin="8,4">
+                                    <StackPanel Grid.Column="0" Orientation="Vertical" Spacing="3">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="{Binding DisplayTitle}" FontWeight="SemiBold" FontSize="13"/>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding DisplayArtist}" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" FontSize="11"/>
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1" Text="{Binding DurationString}" VerticalAlignment="Center" Margin="15,0" FontSize="11"/>
+                                    <Button Grid.Column="2" 
+                                            Command="{Binding $parent[Window].DataContext.RemoveFromPlaylistCommand}" 
+                                            CommandParameter="{Binding}"
+                                            Content="删除" 
+                                            VerticalAlignment="Center" 
+                                            Margin="10,0" 
+                                            FontSize="10"
+                                            Padding="8,4"
+                                            Background="Transparent"
+                                            BorderBrush="Transparent"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>
